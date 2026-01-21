@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 import requests
 import os
+import time
 from fastapi.middleware.cors import CORSMiddleware
 
 apikey = os.getenv("API_KEY")
@@ -17,12 +18,15 @@ headers = {
     "Authorization": f"apikey {apikey}"
 }
 
+CACHE = {}
+LAST_UPDATED = 0
+CACHE_SECONDS = 60
+
 @app.get("/test")
 def test_key():
     return {"key_exists": apikey is not None}
 
-@app.get("/parks")
-def get_all_parks():
+def fetch_parks():
     response = requests.get(url, headers=headers)
 
     facilities = response.json()
@@ -56,4 +60,16 @@ def get_all_parks():
             }
         except Exception as e:
             continue
-    return results
+    return results 
+
+@app.get("/parks")
+def get_parks():
+    global CACHE, LAST_UPDATED
+
+    now = time.time()
+
+    if now - LAST_UPDATED > CACHE_SECONDS:
+        CACHE = fetch_parks()
+        LAST_UPDATED = now
+
+    return CACHE
