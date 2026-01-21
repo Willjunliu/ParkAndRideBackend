@@ -55,14 +55,6 @@ def get_all_parks():
                 "occupied": occupied_spaces,
                 "last_updated": data["MessageDate"]
             }
-
-            # if free_spaces <= 0:
-            #     print(f"{name}: FULL")
-            # else:
-            #     print(f"{name}: {free_spaces} free")
-
-            time.sleep(0.3)  # polite to the API
         except Exception as e:
-            # print(f"Failed for {name}: {e}")
             continue
     return results
