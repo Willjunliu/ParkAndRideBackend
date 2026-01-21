@@ -68,8 +68,8 @@ def get_parks():
 
     now = time.time()
 
-    if now - LAST_UPDATED > CACHE_SECONDS:
+    if now - LAST_UPDATED > CACHE_SECONDS or not CACHE:
         CACHE = fetch_parks()
         LAST_UPDATED = now
-
+        print("Cache updated at", time.strftime("%H:%M:%S"))
     return CACHE
