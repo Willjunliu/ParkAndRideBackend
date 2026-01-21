@@ -2,11 +2,17 @@ from fastapi import FastAPI
 import requests
 import time
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 apikey = os.getenv("API_KEY")
 app = FastAPI()
 
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For testing, allow all origins
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 url = "https://api.transport.nsw.gov.au/v1/carpark"
 headers = {
     "Authorization": f"apikey {apikey}"
