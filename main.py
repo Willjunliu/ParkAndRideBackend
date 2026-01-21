@@ -38,8 +38,7 @@ def fetch_parks():
             response = requests.get(
                 url,
                 headers=headers,
-                params={"facility": facility_id},
-                timeout=10
+                params={"facility": facility_id}
             )
 
             data = response.json()
