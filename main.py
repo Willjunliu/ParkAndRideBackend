@@ -1,11 +1,20 @@
 from fastapi import FastAPI
-import requests
+from contextlib import asynccontextmanager
+import httpx
+import asyncio
 import os
 import time
 from fastapi.middleware.cors import CORSMiddleware
 
 apikey = os.getenv("API_KEY")
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(updater())
+    yield
+    task.cancel()
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,49 +35,63 @@ CACHE_SECONDS = 60
 def test_key():
     return {"key_exists": apikey is not None}
 
-def fetch_parks():
-    response = requests.get(url, headers=headers)
-
-    facilities = response.json()
-
+async def fetch_parks():
     results = {}
 
-    for facility_id, facility_name in facilities.items():
-        try:
-            response = requests.get(
-                url,
-                headers=headers,
-                params={"facility": facility_id}
-            )
+    async with httpx.AsyncClient(timeout=15) as client:
+        facilities_res = await client.get(url, headers=headers)
+        facilities = facilities_res.json()
 
-            data = response.json()
-
-            name = facility_name
-            total_spaces = int(data["spots"])
-            occupied_spaces = int(data["occupancy"]["total"])
-            free_spaces = total_spaces - occupied_spaces
-
-            if "historical only" in name.lower():
+        for facility_id, facility_name in facilities.items():
+            if "historical only" in facility_name.lower():
                 continue
-            results[facility_id] = {
-                "name": name,
-                "free": free_spaces,
-                "total": total_spaces,
-                "occupied": occupied_spaces,
-                "last_updated": data["MessageDate"]
-            }
+
+            try:
+                res = await client.get(
+                    url,
+                    headers=headers,
+                    params={"facility": facility_id}
+                )
+                data = res.json()
+
+                total = int(data["spots"])
+                occupied = int(data["occupancy"]["total"])
+
+                results[facility_id] = {
+                    "name": facility_name,
+                    "free": total - occupied,
+                    "total": total,
+                    "occupied": occupied,
+                    "last_updated": data["MessageDate"]
+                }
+
+            except Exception:
+                continue
+
+    return results
+
+async def updater():
+    global CACHE, LAST_UPDATED
+
+    while True:
+        try:
+            print("Updating cache...")
+            new_data = await fetch_parks()
+
+            if new_data:
+                CACHE = new_data
+                LAST_UPDATED = time.time()
+                print("Cache updated")
+
         except Exception as e:
-            continue
-    return results 
+            print("Updater error:", e)
+
+        await asyncio.sleep(CACHE_SECONDS)
+
 
 @app.get("/parks")
 def get_parks():
-    global CACHE, LAST_UPDATED
-
-    now = time.time()
-
-    if now - LAST_UPDATED > CACHE_SECONDS or not CACHE:
-        CACHE = fetch_parks()
-        LAST_UPDATED = now
-        print("Cache updated at", time.strftime("%H:%M:%S"))
-    return CACHE
+    return {
+        "last_updated": LAST_UPDATED,
+        "data": CACHE
+    }
