@@ -6,7 +6,7 @@ import os
 import time
 from fastapi.middleware.cors import CORSMiddleware
 
-apikey = os.getenv("API_KEY")
+APIKEY = os.getenv("API_KEY")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,10 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-url = "https://api.transport.nsw.gov.au/v1/carpark"
-headers = {
-    "Authorization": f"apikey {apikey}"
-}
+
+URL = "https://api.transport.nsw.gov.au/v1/carpark"
+HEADERS = {"Authorization": f"apikey {APIKEY}"}
 
 CACHE = {}
 LAST_UPDATED = 0
@@ -33,41 +32,48 @@ CACHE_SECONDS = 60
 
 @app.get("/test")
 def test_key():
-    return {"key_exists": apikey is not None}
+    return {"key_exists": APIKEY is not None}
 
 async def fetch_parks():
     results = {}
 
+    start_time = time.perf_counter()
+
     async with httpx.AsyncClient(timeout=15) as client:
-        facilities_res = await client.get(url, headers=headers)
-        facilities = facilities_res.json()
+        api_responce = await client.get(URL, headers=HEADERS)
+        facilities = api_responce.json()
 
         for facility_id, facility_name in facilities.items():
             if "historical only" in facility_name.lower():
                 continue
 
             try:
-                res = await client.get(
-                    url,
-                    headers=headers,
+                responce = await client.get(
+                    URL,
+                    headers=HEADERS,
                     params={"facility": facility_id}
                 )
-                data = res.json()
+                carpark_details = responce.json()
 
-                total = int(data["spots"])
-                occupied = int(data["occupancy"]["total"])
+                total = int(carpark_details["spots"])
+                occupied = int(carpark_details["occupancy"]["total"])
 
                 results[facility_id] = {
                     "name": facility_name,
                     "free": total - occupied,
                     "total": total,
                     "occupied": occupied,
-                    "last_updated": data["MessageDate"]
+                    "last_updated": carpark_details["MessageDate"]
                 }
 
-            except Exception:
-                continue
+                await asyncio.sleep(0.3)
 
+            except Exception as e:
+                print(f"[ERROR] Facility {facility_id} ({facility_name}): {e}")
+                continue
+    end_time = time.perf_counter()  # ⏱ end timer
+    print(f"Cache update finished in {end_time - start_time:.2f} seconds")
+    print(responce)
     return results
 
 async def updater():
