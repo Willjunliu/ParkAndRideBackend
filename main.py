@@ -1,4 +1,3 @@
-from collections import deque
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import httpx
@@ -12,26 +11,9 @@ APIKEY = os.getenv("API_KEY")
 TURSO_URL = os.getenv("TURSO_URL")
 TURSO_TOKEN = os.getenv("TURSO_TOKEN")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    task = asyncio.create_task(updater())
-    yield
-    task.cancel()
-
-app = FastAPI(lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 URL = "https://api.transport.nsw.gov.au/v1/carpark"
 HEADERS = {"Authorization": f"apikey {APIKEY}"}
-
-# Each entry: {"timestamp": float, "data": {facility_id: {...}}}
-HISTORY: deque = deque(maxlen=100)
 
 CACHE = {}
 LAST_UPDATED = 0
@@ -119,9 +101,27 @@ async def db_occupancy_change(current_data: dict):
  
     return deltas
 
-@app.get("/test")
-def test_key():
-    return {"key_exists": APIKEY is not None}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await db_init()
+    task = asyncio.create_task(updater())
+    yield
+    task.cancel()
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+
+
 
 
 async def fetch_parks():
@@ -170,34 +170,6 @@ async def fetch_parks():
     return results
 
 
-def occupancy_change(current_data: dict) -> dict:
-    """
-    For each facility in current_data, find the snapshot closest to
-    TREND_WINDOW seconds ago and compute the change in occupied spots.
-
-    Returns a dict mapping facility_id -> delta_occupied
-    (positive = more cars now, negative = fewer cars now)
-    """
-    now = time.time()
-    target_time = now - TREND_WINDOW
-
-    if not HISTORY:
-        return {}
-
-    # Find the snapshot whose timestamp is closest to target_time
-    best = min(HISTORY, key=lambda h: abs(h["timestamp"] - target_time))
-
-    # Only use it if it's within a reasonable window (±5 min of target)
-    if abs(best["timestamp"] - target_time) > 5 * 60:
-        return {}
-
-    deltas = {}
-    for facility_id, current in current_data.items():
-        past = best["data"].get(facility_id)
-        if past is not None:
-            deltas[facility_id] = current["occupied"] - past["occupied"]
-
-    return deltas
 
 
 async def updater():
@@ -211,8 +183,12 @@ async def updater():
             if new_data:
                 CACHE = new_data
                 LAST_UPDATED = time.time()
-                HISTORY.append({"timestamp": LAST_UPDATED, "data": new_data})
-                print(f"Cache updated. History length: {len(HISTORY)}")
+
+                await db_insert_snapshot(LAST_UPDATED, new_data)
+
+                await db_purge_old()
+
+                print(f"Cache updated. {len(new_data)} facilities")
 
         except Exception as e:
             print("Updater error:", e)
@@ -220,9 +196,19 @@ async def updater():
         await asyncio.sleep(CACHE_SECONDS)
 
 
+
+
+
+
+
+@app.get("/test")
+def test_key():
+    return {"key_exists": APIKEY is not None}
+
+
 @app.get("/parks")
-def get_parks():
-    deltas = occupancy_change(CACHE)
+async def get_parks():
+    deltas = await db_occupancy_change(CACHE)
 
     data_with_trends = {}
     for facility_id, park in CACHE.items():
@@ -230,7 +216,7 @@ def get_parks():
             **park,
             # delta_occupied: positive = more cars, negative = fewer cars
             # None means not enough history yet
-            "delta_occupied": deltas.get(facility_id, None),
+            "delta_occupied": deltas.get(facility_id),
         }
 
     return {
