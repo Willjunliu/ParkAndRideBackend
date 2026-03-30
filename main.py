@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from contextlib import asynccontextmanager
 import httpx
 import asyncio
@@ -224,3 +224,11 @@ async def get_parks():
         "trend_window_minutes": TREND_WINDOW // 60,
         "data": data_with_trends
     }
+
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
+
+@app.head("/ping")
+def ping_head():
+    return Response(status_code=200)
