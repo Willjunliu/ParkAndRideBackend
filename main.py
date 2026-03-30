@@ -5,9 +5,12 @@ import httpx
 import asyncio
 import os
 import time
+import libsql_client
 from fastapi.middleware.cors import CORSMiddleware
 
 APIKEY = os.getenv("API_KEY")
+TURSO_URL = os.getenv("TURSO_URL")
+TURSO_TOKEN = os.getenv("TURSO_TOKEN")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,7 +38,86 @@ LAST_UPDATED = 0
 CACHE_SECONDS = 60
 
 TREND_WINDOW = 15 * 60  # 15 minutes in seconds
+KEEP_DAYS     = 7
 
+
+def make_client():
+    return libsql_client.create_client(
+        url = TURSO_URL,
+        auth_token = TURSO_TOKEN
+    )
+
+async def db_init():
+    async with make_client() as client:
+        await client.batch([
+            """
+           CREATE TABLE IF NOT EXISTS snapshots (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts          REAL    NOT NULL,
+                facility_id TEXT    NOT NULL,
+                occupied    INTEGER NOT NULL,
+                total       INTEGER NOT NULL
+            )
+            """,
+             "CREATE INDEX IF NOT EXISTS idx_ts  ON snapshots(ts)",
+            "CREATE INDEX IF NOT EXISTS idx_fac ON snapshots(facility_id, ts)",
+        ])
+    print(f"[DB] Initialised — {TURSO_URL}")
+
+async def db_insert_snapshot(ts: float, data: dict):
+    statements = [
+        libsql_client.Statement(
+            "INSERT INTO snapshots (ts, facility_id, occupied, total) VALUES (?, ?, ?, ?)",
+            [ts, facility_id, park["occupied"], park["total"]],
+        )
+        for facility_id, park in data.items()
+    ]
+    async with make_client() as client:
+        await client.batch(statements)
+ 
+ 
+async def db_purge_old():
+    cutoff = time.time() - KEEP_DAYS * 86400
+    async with make_client() as client:
+        await client.execute(
+            "DELETE FROM snapshots WHERE ts < ?", [cutoff]
+        )
+ 
+ 
+async def db_occupancy_change(current_data: dict):
+    """
+    For each facility, find the snapshot closest to TREND_WINDOW seconds ago
+    and return the delta in occupied spots.
+    Tolerance: ±5 min around the target timestamp.
+    """
+    now       = time.time()
+    target_ts = now - TREND_WINDOW
+    tolerance = 5 * 60
+ 
+    deltas = {}
+    async with make_client() as client:
+        for facility_id, current in current_data.items():
+            result = await client.execute(
+                """
+                SELECT occupied
+                FROM   snapshots
+                WHERE  facility_id = ?
+                  AND  ts BETWEEN ? AND ?
+                ORDER  BY ABS(ts - ?) ASC
+                LIMIT  1
+                """,
+                [
+                    facility_id,
+                    target_ts - tolerance,
+                    target_ts + tolerance,
+                    target_ts,
+                ],
+            )
+            if result.rows:
+                past_occupied = result.rows[0][0]
+                deltas[facility_id] = current["occupied"] - past_occupied
+ 
+    return deltas
 
 @app.get("/test")
 def test_key():
