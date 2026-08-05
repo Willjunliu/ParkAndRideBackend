@@ -65,6 +65,43 @@ async def db_purge_old():
             "DELETE FROM snapshots WHERE ts < ?", [cutoff]
         )
  
+
+async def db_get_week_ago_history(facility_id: str):
+    now = time.time()
+
+    start_time = now - (7 * 86400)
+    end_time = now - (6 * 86400)
+
+    async with make_client() as client:
+        result = await client.execute(
+            """
+            SELECT ts, occupied, total
+            FROM snapshots
+            WHERE facility_id = ?
+              AND ts BETWEEN ? AND ?
+            ORDER BY ts ASC
+            """,
+            [
+                facility_id,
+                start_time,
+                end_time
+            ],
+        )
+
+    history = []
+
+    for row in result.rows:
+        ts, occupied, total = row
+
+        history.append({
+            "timestamp": ts,
+            "occupied": occupied,
+            "free": total - occupied,
+            "total": total
+        })
+
+    return history
+
  
 async def db_occupancy_change(current_data: dict):
     """
@@ -223,6 +260,17 @@ async def get_parks():
         "last_updated": LAST_UPDATED,
         "trend_window_minutes": TREND_WINDOW // 60,
         "data": data_with_trends
+    }
+
+
+@app.get("/parks/{facility_id}/history")
+async def get_park_history(facility_id: str):
+    history = await db_get_week_ago_history(facility_id)
+
+    return {
+        "facility_id": facility_id,
+        "period": "same time last week",
+        "data": history
     }
 
 @app.get("/ping")
