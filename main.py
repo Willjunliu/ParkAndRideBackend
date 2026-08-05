@@ -4,7 +4,7 @@ import httpx
 import asyncio
 import os
 import time
-import libsql
+import libsql_client
 from fastapi.middleware.cors import CORSMiddleware
 
 APIKEY = os.getenv("API_KEY")
@@ -24,7 +24,7 @@ KEEP_DAYS     = 7
 
 
 def make_client():
-    return libsql.create_client(
+    return libsql_client.create_client(
         url = TURSO_URL,
         auth_token = TURSO_TOKEN
     )
@@ -48,7 +48,7 @@ async def db_init():
 
 async def db_insert_snapshot(ts: float, data: dict):
     statements = [
-        libsql.Statement(
+        libsql_client.Statement(
             "INSERT INTO snapshots (ts, facility_id, occupied, total) VALUES (?, ?, ?, ?)",
             [ts, facility_id, park["occupied"], park["total"]],
         )
