@@ -69,8 +69,8 @@ async def db_purge_old():
 async def db_get_week_ago_history(facility_id: str):
     now = time.time()
 
-    start_time = now - (15 * 60)
-    end_time = now - (0 * 60)
+    start_time = now - (1 * 86400)
+    end_time = now - (0 * 86400)
 
     async with make_client() as client:
         result = await client.execute(
