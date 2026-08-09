@@ -4,7 +4,7 @@ A real-time carpark availability web application for NSW that helps drivers find
 
 ## 🌐 Live Demo
 
-**[Visit Better Park & Ride](YOUR_WEBSITE_URL)**
+**[Visit Better Park & Ride](https://puuggordo.github.io/BetterParkAndRide/)**
 
 The application retrieves real-time carpark data from Transport for NSW and provides occupancy trends using data collected over time.
 
@@ -17,12 +17,6 @@ The application retrieves real-time carpark data from Transport for NSW and prov
 * ☁️ **Cloud database** — Historical snapshots are stored using Turso.
 * ⚡ **REST API** — FastAPI backend providing carpark and historical data.
 * 📱 **Web interface** — Interactive frontend for browsing carpark availability.
-
-## 🖥️ Screenshots
-
-<!-- Add screenshots of your website here -->
-
-![Better Park & Ride](screenshots/homepage.png)
 
 ## 🏗️ Architecture
 
@@ -190,9 +184,3 @@ better-park-and-ride/
 ## 📄 Data Source
 
 Carpark information is provided by **Transport for NSW** through its public Car Park API.
-
-## 👤 Author
-
-**William Liu**
-
-Computer Science student at UTS.
