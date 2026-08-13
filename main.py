@@ -66,11 +66,11 @@ async def db_purge_old():
         )
  
 
-async def db_get_week_ago_history(facility_id: str):
+async def db_get_history(facility_id: str, start_day: float, end_day: float):
     now = time.time()
 
-    start_time = now - (1 * 86400)
-    end_time = now - (0 * 86400)
+    start_time = now - (start_day * 86400)
+    end_time = now - (end_day * 86400)
 
     async with make_client() as client:
         result = await client.execute(
@@ -264,8 +264,8 @@ async def get_parks():
 
 
 @app.get("/parks/{facility_id}/history")
-async def get_park_history(facility_id: str):
-    history = await db_get_week_ago_history(facility_id)
+async def get_park_history(facility_id: str, start_day: float, end_day: float):
+    history = await db_get_history(facility_id, start_day, end_day)
 
     return {
         "facility_id": facility_id,
