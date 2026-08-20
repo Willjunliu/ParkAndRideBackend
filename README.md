@@ -4,7 +4,7 @@ A real-time carpark availability web application for NSW that helps drivers find
 
 ## Live Demo
 
-**[Visit Better Park And Ride](https://puuggordo.github.io/BetterParkAndRide/)**
+**[Visit Better Park And Ride](https://willjunliu.github.io/BetterParkAndRide/)**
 
 The application retrieves real-time carpark data from Transport for NSW and provides occupancy trends using data collected over time.
 
